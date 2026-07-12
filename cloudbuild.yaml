@@ -67,5 +67,21 @@ steps:
     - -f
     - k8s/
 
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  id: Sign Image
+  entrypoint: bash
+  args:
+    - -c
+    - |
+      gcloud alpha container binauthz attestations sign-and-create \
+      --artifact-url=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA \
+      --attestor=trusted-cloudbuild \
+      --keyversion-project=$PROJECT_ID \
+      --keyversion-location=global \
+      --keyversion-keyring=binaryauth-keyring \
+      --keyversion-key=binaryauth-key \
+      --keyversion=1
+
 images:
 - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
+
