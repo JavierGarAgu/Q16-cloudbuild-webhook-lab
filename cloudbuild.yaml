@@ -1,0 +1,71 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _REGION: europe-west1
+  _REPOSITORY: trusted-images
+  _IMAGE: webapp
+  _CLUSTER: binaryauth-cluster
+  _ZONE: europe-west1-b
+
+steps:
+
+- name: gcr.io/cloud-builders/docker
+  id: Build
+  args:
+    - build
+    - -t
+    - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
+    - .
+
+- name: gcr.io/cloud-builders/docker
+  id: Push
+  args:
+    - push
+    - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
+
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  id: Sign Image
+  entrypoint: bash
+  args:
+    - -c
+    - |
+      gcloud container binauthz attestations sign-and-create \
+      --artifact-url=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA \
+      --attestor=trusted-cloudbuild \
+      --keyversion-project=$PROJECT_ID \
+      --keyversion-location=global \
+      --keyversion-keyring=binaryauth-keyring \
+      --keyversion-key=binaryauth-key \
+      --keyversion=1
+
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  id: Credentials
+  entrypoint: gcloud
+  args:
+    - container
+    - clusters
+    - get-credentials
+    - ${_CLUSTER}
+    - --zone=${_ZONE}
+
+- name: ubuntu
+  id: Patch Manifest
+  entrypoint: bash
+  args:
+    - -c
+    - |
+      sed -i "s|IMAGE_PLACEHOLDER|${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA|g" k8s/deployment.yaml
+
+- name: gcr.io/cloud-builders/kubectl
+  id: Deploy
+  env:
+    - CLOUDSDK_COMPUTE_ZONE=${_ZONE}
+    - CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}
+  args:
+    - apply
+    - -f
+    - k8s/
+
+images:
+- ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
