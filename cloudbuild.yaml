@@ -5,7 +5,7 @@ substitutions:
   _REGION: "europe-west1"
   _REPOSITORY: "trusted-images"
   _IMAGE: "webapp"
-  _CLUSTER: "binaryauth-cluster"
+  _CLUSTER: "binaryauth-cluster-v2"
   _ZONE: "europe-west1-b"
 
 steps:
@@ -35,7 +35,7 @@ steps:
     - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA"
 
 #######################################################
-# CREATE ATTESTATION
+# CREATE BINARY AUTHORIZATION ATTESTATION
 #######################################################
 
 - id: Sign Image
@@ -48,11 +48,11 @@ steps:
     - |
       gcloud alpha container binauthz attestations sign-and-create \
         --artifact-url=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA \
-        --attestor=trusted-cloudbuild \
+        --attestor=trusted-cloudbuild-v2 \
         --keyversion-project=$PROJECT_ID \
         --keyversion-location=global \
-        --keyversion-keyring=binaryauth-keyring \
-        --keyversion-key=binaryauth-key \
+        --keyversion-keyring=binaryauth-keyring-v2 \
+        --keyversion-key=binaryauth-key-v2 \
         --keyversion=1
 
 #######################################################
@@ -73,7 +73,7 @@ steps:
     - "--project=$PROJECT_ID"
 
 #######################################################
-# PATCH MANIFEST
+# UPDATE DEPLOYMENT MANIFEST
 #######################################################
 
 - id: Update Manifest
@@ -87,7 +87,7 @@ steps:
       sed -i "s|IMAGE_PLACEHOLDER|${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA|g" k8s/deployment.yaml
 
 #######################################################
-# DEPLOY
+# DEPLOY TO GKE
 #######################################################
 
 - id: Deploy
