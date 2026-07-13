@@ -49,7 +49,6 @@ steps:
       gcloud alpha container binauthz attestations sign-and-create \
         --artifact-url=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA \
         --attestor=projects/$PROJECT_ID/attestors/trusted-cloudbuild-v2 \
-        --note=projects/$PROJECT_ID/notes/trusted-cloudbuild-note-v2 \
         --keyversion-project=$PROJECT_ID \
         --keyversion-location=global \
         --keyversion-keyring=binaryauth-keyring-v2 \
