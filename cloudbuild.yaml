@@ -37,8 +37,7 @@ steps:
 #######################################################
 # CREATE BINARY AUTHORIZATION ATTESTATION
 #######################################################
-
-- id: Sign Image
+- id: Get Image Digest
   name: gcr.io/google.com/cloudsdktool/cloud-sdk
   waitFor:
     - Push
@@ -46,8 +45,22 @@ steps:
   args:
     - -c
     - |
+      gcloud artifacts docker images describe \
+        ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA \
+        --format='value(image_summary.digest)' > /workspace/digest.txt
+        
+- id: Sign Image
+  name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  waitFor:
+    - Get Image Digest
+  entrypoint: bash
+  args:
+    - -c
+    - |
+      DIGEST=$(cat /workspace/digest.txt)
+
       gcloud alpha container binauthz attestations sign-and-create \
-        --artifact-url=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA \
+        --artifact-url=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}@${DIGEST} \
         --attestor=projects/$PROJECT_ID/attestors/trusted-cloudbuild-v2 \
         --keyversion-project=$PROJECT_ID \
         --keyversion-location=global \
