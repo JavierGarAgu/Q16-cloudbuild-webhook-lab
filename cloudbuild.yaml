@@ -18,9 +18,9 @@ steps:
   name: gcr.io/cloud-builders/docker
   args:
     - build
-    - "-t"
-    - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA"
-    - "."
+    - -t
+    - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
+    - .
 
 #######################################################
 # PUSH IMAGE
@@ -32,12 +32,13 @@ steps:
     - Build
   args:
     - push
-    - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA"
+    - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
 
 #######################################################
-# CREATE BINARY AUTHORIZATION ATTESTATION
+# GET IMAGE DIGEST
 #######################################################
-- id: Get Image Digest
+
+- id: Get Digest
   name: gcr.io/google.com/cloudsdktool/cloud-sdk
   waitFor:
     - Push
@@ -45,22 +46,30 @@ steps:
   args:
     - -c
     - |
-      gcloud artifacts docker images describe \
+      DIGEST=$(gcloud artifacts docker images describe \
         ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA \
-        --format='value(image_summary.digest)' > /workspace/digest.txt
-        
+        --format="value(image_summary.digest)")
+
+      echo "${DIGEST}" > /workspace/digest.txt
+
+      echo "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}@${DIGEST}" > /workspace/image.txt
+
+#######################################################
+# SIGN IMAGE
+#######################################################
+
 - id: Sign Image
   name: gcr.io/google.com/cloudsdktool/cloud-sdk
   waitFor:
-    - Get Image Digest
+    - Get Digest
   entrypoint: bash
   args:
     - -c
     - |
-      DIGEST=$(cat /workspace/digest.txt)
+      IMAGE=$(cat /workspace/image.txt)
 
       gcloud alpha container binauthz attestations sign-and-create \
-        --artifact-url=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}@${DIGEST} \
+        --artifact-url=$IMAGE \
         --attestor=projects/$PROJECT_ID/attestors/trusted-cloudbuild-v2 \
         --keyversion-project=$PROJECT_ID \
         --keyversion-location=global \
@@ -81,12 +90,12 @@ steps:
     - container
     - clusters
     - get-credentials
-    - "${_CLUSTER}"
-    - "--zone=${_ZONE}"
-    - "--project=$PROJECT_ID"
+    - ${_CLUSTER}
+    - --zone=${_ZONE}
+    - --project=$PROJECT_ID
 
 #######################################################
-# UPDATE DEPLOYMENT MANIFEST
+# UPDATE MANIFEST
 #######################################################
 
 - id: Update Manifest
@@ -97,10 +106,12 @@ steps:
   args:
     - -c
     - |
-      sed -i "s|IMAGE_PLACEHOLDER|${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA|g" k8s/deployment.yaml
+      IMAGE=$(cat /workspace/image.txt)
+
+      sed -i "s|IMAGE_PLACEHOLDER|${IMAGE}|g" k8s/deployment.yaml
 
 #######################################################
-# DEPLOY TO GKE
+# DEPLOY
 #######################################################
 
 - id: Deploy
@@ -120,4 +131,4 @@ steps:
 #######################################################
 
 images:
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA"
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
